@@ -3,56 +3,23 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import threading
 import logging
-
 import pika
-#from email.message import EmailMessage
 import redis
 
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 
-
+# Initialize FastAPI app
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  
-    allow_headers=["*"],  
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Connect to Redis
-try:
-    r = redis.Redis(host='localhost', port=6379, db=1, decode_responses=True)
-except redis.RedisError:
-    print("Failed to connect to Redis, check your Redis server and connection details.")
-
-rabbitmq_connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-rabbitmq_channel = rabbitmq_connection.channel()
-queue_name = "hello"
-#print("testing this")
-#queue_name = "powerloom-processhub-commands-q:wallettracking:0xeF85a395631566291AAe51a37930304dB2f5E501"
-
-# Function to process RabbitMQ messages
-
-# Function to send email
-
-# Set up RabbitMQ consumer in a separate thread
-def rabbitmq_callback(ch, method, properties, body):
-    print(f"Received message from RabbitMQ: {body}")
-    logging.info(f"Received message from RabbitMQ: {body}")
-
-def start_rabbitmq_listener():
-    rabbitmq_channel.queue_declare(queue=queue_name, durable=False)
-    rabbitmq_channel.basic_consume(queue=queue_name, on_message_callback=rabbitmq_callback, auto_ack=True)
-    rabbitmq_channel.start_consuming()
-
-@app.on_event("startup")
-async def startup_event():
-    # Start the RabbitMQ consumer in a background thread
-    thread = threading.Thread(target=start_rabbitmq_listener)
-    thread.start()
-
-
+# Class definitions
 class Transaction(BaseModel):
     contract_interacted_with: str
     txhash: str
@@ -62,23 +29,60 @@ class User(BaseModel):
     wallet_address: str
     email: str
 
-@app.post("/subscribe/") 
+# Connect to Redis
+def connect_to_redis():
+    try:
+        return redis.Redis(host='localhost', port=6379, db=1, decode_responses=True)
+    except redis.RedisError as e:
+        logging.error(f"Failed to connect to Redis: {e}")
+        raise
+
+# Connect to RabbitMQ
+def connect_to_rabbitmq():
+    try:
+        credentials = pika.PlainCredentials('guest', 'guest')  # Replace with your credentials
+        return pika.BlockingConnection(
+            pika.ConnectionParameters(host='localhost', credentials=credentials))
+    except pika.exceptions.AMQPConnectionError as e:
+        logging.error(f"Failed to connect to RabbitMQ: {e}")
+        raise
+
+# Initialize Redis and RabbitMQ connections
+r = connect_to_redis()
+rabbitmq_connection = connect_to_rabbitmq()
+rabbitmq_channel = rabbitmq_connection.channel()
+queue_name = "hello"
+
+# RabbitMQ consumer setup
+def rabbitmq_callback(ch, method, properties, body):
+    logging.info(f"Received message from RabbitMQ: {body}")
+
+def start_rabbitmq_listener():
+    rabbitmq_channel.queue_declare(queue=queue_name, durable=False)
+    rabbitmq_channel.basic_consume(queue=queue_name, on_message_callback=rabbitmq_callback, auto_ack=True)
+    rabbitmq_channel.start_consuming()
+
+# Start the RabbitMQ listener on app startup
+@app.on_event("startup")
+async def startup_event():
+    thread = threading.Thread(target=start_rabbitmq_listener)
+    thread.start()
+
+# FastAPI endpoints
+@app.post("/subscribe/")
 def subscribe(user: User):
     key = f"user:{user.wallet_address}"
-
     if r.exists(key):
         return {"status": "error", "message": "User already exists"}
 
-    # Store the user data
     r.hmset(key, user.dict())
     return {"status": "success", "message": "User subscribed successfully"}
 
 @app.post("/transactions/")
 def create_transaction(transaction: Transaction):
-    # Tx hash is being treacted as unique key:
     key = f"transaction:{transaction.txhash}"
     if not r.exists(key):
-        r.hmset(key, transaction.dict())  # Redis Storing of the data
+        r.hmset(key, transaction.dict())
         return {"status": "success", "transaction": transaction}
     else:
         raise HTTPException(status_code=400, detail="Transaction already exists")
@@ -90,4 +94,3 @@ def read_transaction(txhash: str):
     if transaction:
         return transaction
     raise HTTPException(status_code=404, detail="Transaction not found")
-
