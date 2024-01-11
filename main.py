@@ -32,7 +32,7 @@ class User(BaseModel):
 # Connect to Redis
 def connect_to_redis():
     try:
-        return redis.Redis(host='localhost', port=6379, db=1, decode_responses=True)
+        return redis.Redis(host='redis', port=6379, db=1, decode_responses=True)
     except redis.RedisError as e:
         logging.error(f"Failed to connect to Redis: {e}")
         raise
@@ -42,7 +42,7 @@ def connect_to_rabbitmq():
     try:
         credentials = pika.PlainCredentials('guest', 'guest')  # Replace with your credentials
         return pika.BlockingConnection(
-            pika.ConnectionParameters(host='localhost', credentials=credentials))
+            pika.ConnectionParameters(host='rabbitmq', credentials=credentials))
     except pika.exceptions.AMQPConnectionError as e:
         logging.error(f"Failed to connect to RabbitMQ: {e}")
         raise
