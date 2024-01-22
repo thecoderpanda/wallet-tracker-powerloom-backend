@@ -2,3 +2,5 @@
 
 
 
+## TODO
+- Add external data source to snapshotter-config to fetch new wallets
