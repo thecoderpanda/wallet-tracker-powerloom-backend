@@ -206,7 +206,7 @@ async def get_wallet_data(project_id: str, contract_id: str):
 
         ipfs_data_list = []
         for ipfs_hash in decoded_data:
-            ipfs_api_url = f"http://127.0.0.1:5001/api/v0/cat?arg={ipfs_hash}"
+            ipfs_api_url = f"{IPFS_URL}/cat?arg={ipfs_hash}"
             try:
                 response = requests.post(ipfs_api_url)
                 response.raise_for_status()
