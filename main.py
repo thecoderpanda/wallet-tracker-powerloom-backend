@@ -1,4 +1,5 @@
 import logging
+import os
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends
 import redis.asyncio as aioredis
 import requests
@@ -16,6 +17,17 @@ import tracemalloc
 logging.basicConfig(level=logging.INFO)
 tracemalloc.start()
 import asyncio
+
+## ENVIRONMENT VARIABLES
+
+REDIS_URL = os.getenv("REDIS_HOST", "localhost")
+MONGODB = os.getenv("MONGODB", "mongodb://localhost:27017")
+IPFS_URL = os.getenv("IPFS_URL", "http://127.0.0.1:5001/api/v0")
+SENDER_EMAIL = os.getenv("SENDER_EMAIL", "test@test.com")
+SENDER_EMAIL_PASSWORD = os.getenv("SENDER_EMAIL_PASSWORD", "test")
+SENDER_EMAIL_USERNAME = os.getenv("SENDER_EMAIL_USERNAME", "test")
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = os.getenv("SMTP_PORT", 587)
 
 app = FastAPI()
 app.add_middleware(
@@ -37,7 +49,7 @@ class User(BaseModel):
     email: str
 
 #MongoDB Connection
-client = AsyncIOMotorClient('mongodb://localhost:27017')
+client = AsyncIOMotorClient(MONGODB)
 db = client.userdb
 users_collection = db.user  # Collection for users
 transaction_store = db.transactions
@@ -48,13 +60,13 @@ async_redis_client: aioredis.Redis = None
 
 async def connect_to_async_redis():
     try:
-        return await aioredis.from_url("redis://localhost:6379", decode_responses=True)
+        return await aioredis.from_url(REDIS_URL, decode_responses=True)
     except Exception as e:
         logging.error(f"Failed to connect to Async Redis: {e}")
         raise
 
 async def fetch_ipfs_data(ipfs_hash: str):
-    ipfs_api_url = f"http://127.0.0.1:5001/api/v0/cat?arg={ipfs_hash}"
+    ipfs_api_url = f"{IPFS_URL}/cat?arg={ipfs_hash}"
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(ipfs_api_url)
@@ -66,9 +78,9 @@ async def fetch_ipfs_data(ipfs_hash: str):
 
 #SMTP
 def send_email(receiver_email, subject, body):
-    sender_email = "shantanu@powerloom.io"
-    password = "a34c283c54840f"
-    username = "43f9773bbbad88"
+    sender_email = SENDER_EMAIL
+    password = SENDER_EMAIL_PASSWORD
+    username = SENDER_EMAIL_USERNAME
 
     # Create a multipart message
     message = MIMEMultipart()
@@ -80,7 +92,7 @@ def send_email(receiver_email, subject, body):
     message.attach(MIMEText(body, "plain"))
 
     # Initialize the SMTP server
-    server = smtplib.SMTP('sandbox.smtp.mailtrap.io', 2525)
+    server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
     server.starttls()
 
     # Login to the server
